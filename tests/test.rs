@@ -182,3 +182,38 @@ fn implements_default() {
     let set: fst_no_std::Set<Vec<u8>> = Default::default();
     assert!(set.is_empty());
 }
+
+#[cfg(feature = "levenshtein")]
+#[test]
+fn levenshtein_cjk_shared_leading_bytes() {
+    // Regression: CJK characters all share leading UTF-8 bytes (most
+    // begin with 0xE4..0xE9). The previous DFA construction created
+    // fresh empty intermediate states for each match char and
+    // overwrote shared-prefix transitions, so the DFA would silently
+    // reject valid CJK input at distance >= 1.
+    //
+    // After the fork-on-overwrite fix:
+    //   - query "刘德" at distance 1 must accept its own exact form
+    //   - and accept "刘德华" (1 char insertion)
+    //   - and accept "刘德" itself (distance 0)
+    let set = Set::from_iter(vec!["刘德", "刘德华", "张艺谋", "成龙"])
+        .unwrap();
+    let lev = Levenshtein::new("刘德", 1).unwrap();
+    let mut got = set.search(&lev).into_stream().into_strs().unwrap();
+    got.sort();
+    let mut want = vec!["刘德".to_string(), "刘德华".to_string()];
+    want.sort();
+    assert_eq!(got, want);
+
+    // 张艺谋 ~1 should match itself (distance 0) only — there are no
+    // 1-char-edit neighbours in this small set.
+    let lev2 = Levenshtein::new("张艺谋", 1).unwrap();
+    let got2 = set.search(&lev2).into_stream().into_strs().unwrap();
+    assert_eq!(got2, vec!["张艺谋".to_string()]);
+
+    // 成龙 ~1: matches itself (distance 0). Also accepts any
+    // 1-char-edit neighbour — none of the other entries qualify.
+    let lev3 = Levenshtein::new("成龙", 1).unwrap();
+    let got3 = set.search(&lev3).into_stream().into_strs().unwrap();
+    assert_eq!(got3, vec!["成龙".to_string()]);
+}

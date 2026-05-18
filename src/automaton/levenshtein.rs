@@ -257,8 +257,49 @@ impl DfaBuilder {
         for seq in Utf8Sequences::new(from_chr, to_chr) {
             let mut fsi = from_si;
             for range in &seq.as_slice()[0..seq.len() - 1] {
-                let tsi = self.new_state(false);
-                self.add_utf8_range(overwrite, fsi, tsi, range);
+                // For match paths (`overwrite=true`) on a single-byte
+                // range (the typical "this byte of char `c`" case), we
+                // must **preserve** any prior transitions on the shared
+                // UTF-8 prefix — otherwise mismatch fallbacks and
+                // sibling match paths get clobbered, silently rejecting
+                // valid input. Concretely, CJK chars all share leading
+                // bytes (E4..E9): without preservation, query "刘德"
+                // first installs E5→I_刘, then E5→I_德 overwriting I_刘
+                // entirely, so the DFA can't even match "刘德" itself
+                // at distance ≥ 1.
+                //
+                // Solution: *fork* the existing intermediate by cloning
+                // its full 256-byte transition table into a fresh state
+                // that subsequent overwrites in this chain can modify
+                // without disturbing the original (still reachable via
+                // other paths, or about to be replaced atomically).
+                let tsi = if overwrite && range.start == range.end {
+                    let b = range.start as usize;
+                    match self.dfa.states[fsi].next[b] {
+                        Some(existing) => {
+                            let cloned_next =
+                                self.dfa.states[existing].next;
+                            let cloned_is_match =
+                                self.dfa.states[existing].is_match;
+                            self.dfa.states.push(State {
+                                next: cloned_next,
+                                is_match: cloned_is_match,
+                            });
+                            let new_si = self.dfa.states.len() - 1;
+                            self.dfa.states[fsi].next[b] = Some(new_si);
+                            new_si
+                        }
+                        None => {
+                            let new_si = self.new_state(false);
+                            self.dfa.states[fsi].next[b] = Some(new_si);
+                            new_si
+                        }
+                    }
+                } else {
+                    let new_si = self.new_state(false);
+                    self.add_utf8_range(overwrite, fsi, new_si, range);
+                    new_si
+                };
                 fsi = tsi;
             }
             self.add_utf8_range(
