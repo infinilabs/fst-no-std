@@ -28,8 +28,10 @@ use crate::error::Result;
 #[cfg(feature = "alloc")]
 use crate::stream::{IntoStreamer, Streamer};
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 pub use crate::raw::build::Builder;
+#[cfg(feature = "alloc")]
+pub use crate::raw::fst_write::FstWrite;
 pub use crate::raw::error::Error;
 pub use crate::raw::node::{Node, Transitions};
 pub use crate::raw::ops::IndexedValue;
@@ -40,11 +42,13 @@ pub use crate::raw::ops::{
 #[cfg(feature = "alloc")]
 use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 mod build;
 mod common_inputs;
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 mod counting_writer;
+#[cfg(feature = "alloc")]
+pub(crate) mod fst_write;
 mod crc32;
 mod crc32_table;
 mod error;
@@ -301,7 +305,7 @@ impl Fst<Vec<u8>> {
     /// Note that this is a convenience function to build an FST in memory.
     /// To build an FST that streams to an arbitrary `io::Write`, use
     /// `raw::Builder`.
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     pub fn from_iter_set<K, I>(iter: I) -> Result<Fst<Vec<u8>>>
     where
         K: AsRef<[u8]>,
@@ -324,7 +328,7 @@ impl Fst<Vec<u8>> {
     /// Note that this is a convenience function to build an FST in memory.
     /// To build an FST that streams to an arbitrary `io::Write`, use
     /// `raw::Builder`.
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     pub fn from_iter_map<K, I>(iter: I) -> Result<Fst<Vec<u8>>>
     where
         K: AsRef<[u8]>,
@@ -655,7 +659,7 @@ impl<D: AsRef<[u8]>> Fst<D> {
     }
 
     #[inline]
-    fn as_ref(&self) -> FstRef {
+    fn as_ref(&self) -> FstRef<'_> {
         FstRef { meta: &self.meta, data: self.data.as_ref() }
     }
 }
