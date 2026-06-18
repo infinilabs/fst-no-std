@@ -1,15 +1,15 @@
 #[cfg(feature = "alloc")]
 use core::fmt;
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 use core::iter;
 #[cfg(feature = "alloc")]
 use core::iter::FromIterator;
-#[cfg(feature = "std")]
-use std::io;
 
 #[cfg(feature = "alloc")]
 use crate::automaton::{AlwaysMatch, Automaton};
 use crate::raw;
+#[cfg(feature = "alloc")]
+use crate::raw::FstWrite;
 pub use crate::raw::IndexedValue;
 #[cfg(feature = "alloc")]
 use crate::stream::IntoStreamer;
@@ -75,7 +75,6 @@ impl Map<Vec<u8>> {
     /// Note that this is a convenience function to build a map in memory.
     /// To build a map that streams to an arbitrary `io::Write`, use
     /// `MapBuilder`.
-    #[cfg(feature = "std")]
     pub fn from_iter<K, I>(iter: I) -> Result<Map<Vec<u8>>>
     where
         K: AsRef<[u8]>,
@@ -481,7 +480,7 @@ fn example() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl Default for Map<Vec<u8>> {
     #[inline]
     fn default() -> Map<Vec<u8>> {
@@ -628,10 +627,10 @@ impl<'m, 'a, D: AsRef<[u8]>> IntoStreamer<'a> for &'m Map<D> {
 ///     (b"stevie".to_vec(), 3),
 /// ]);
 /// ```
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 pub struct MapBuilder<W>(raw::Builder<W>);
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl MapBuilder<Vec<u8>> {
     /// Create a builder that builds a map in memory.
     #[inline]
@@ -648,8 +647,8 @@ impl MapBuilder<Vec<u8>> {
     }
 }
 
-#[cfg(feature = "std")]
-impl<W: io::Write> MapBuilder<W> {
+#[cfg(feature = "alloc")]
+impl<W: FstWrite> MapBuilder<W> {
     /// Create a builder that builds a map by writing it to `wtr` in a
     /// streaming fashion.
     pub fn new(wtr: W) -> Result<MapBuilder<W>> {

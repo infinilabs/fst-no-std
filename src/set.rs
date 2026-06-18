@@ -2,6 +2,8 @@
 use crate::automaton::{AlwaysMatch, Automaton};
 use crate::raw;
 #[cfg(feature = "alloc")]
+use crate::raw::FstWrite;
+#[cfg(feature = "alloc")]
 use crate::stream::IntoStreamer;
 use crate::stream::Streamer;
 use crate::Result;
@@ -9,12 +11,10 @@ use crate::Result;
 use alloc::{string::String, vec::Vec};
 #[cfg(feature = "alloc")]
 use core::fmt;
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 use core::iter;
 #[cfg(feature = "alloc")]
 use core::iter::FromIterator;
-#[cfg(feature = "std")]
-use std::io;
 
 /// Set is a lexicographically ordered set of byte strings.
 ///
@@ -49,7 +49,6 @@ impl Set<Vec<u8>> {
     /// Note that this is a convenience function to build a set in memory.
     /// To build a set that streams to an arbitrary `io::Write`, use
     /// `SetBuilder`.
-    #[cfg(feature = "std")]
     pub fn from_iter<T, I>(iter: I) -> Result<Set<Vec<u8>>>
     where
         T: AsRef<[u8]>,
@@ -429,7 +428,7 @@ fn example() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl Default for Set<Vec<u8>> {
     #[inline]
     fn default() -> Set<Vec<u8>> {
@@ -570,10 +569,10 @@ impl<D: AsRef<[u8]>> From<raw::Fst<D>> for Set<D> {
 ///     "bruce".as_bytes(), "clarence".as_bytes(), "stevie".as_bytes(),
 /// ]);
 /// ```
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 pub struct SetBuilder<W>(raw::Builder<W>);
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl SetBuilder<Vec<u8>> {
     /// Create a builder that builds a set in memory.
     #[inline]
@@ -590,8 +589,8 @@ impl SetBuilder<Vec<u8>> {
     }
 }
 
-#[cfg(feature = "std")]
-impl<W: io::Write> SetBuilder<W> {
+#[cfg(feature = "alloc")]
+impl<W: FstWrite> SetBuilder<W> {
     /// Create a builder that builds a set by writing it to `wtr` in a
     /// streaming fashion.
     pub fn new(wtr: W) -> Result<SetBuilder<W>> {

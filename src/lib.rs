@@ -299,10 +299,10 @@ doc_comment::doctest!("../README.md");
 pub use crate::automaton::Automaton;
 pub use crate::error::{Error, Result};
 pub use crate::map::Map;
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 pub use crate::map::MapBuilder;
 pub use crate::set::Set;
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 pub use crate::set::SetBuilder;
 pub use crate::stream::{IntoStreamer, Streamer};
 

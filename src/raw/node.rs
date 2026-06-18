@@ -1,16 +1,18 @@
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 use core::cmp;
 use core::fmt;
 use core::ops::Range;
-#[cfg(feature = "std")]
-use std::io;
 
 use crate::bytes;
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
+use crate::error::Result;
+#[cfg(feature = "alloc")]
 use crate::raw::build::BuilderNode;
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 use crate::raw::common_inputs::COMMON_INPUTS;
 use crate::raw::common_inputs::COMMON_INPUTS_INV;
+#[cfg(feature = "alloc")]
+use crate::raw::fst_write::FstWrite;
 use crate::raw::{
     u64_to_usize, CompiledAddr, Output, Transition, EMPTY_ADDRESS,
 };
@@ -257,13 +259,13 @@ impl<'f> Node<'f> {
         }
     }
 
-    #[cfg(feature = "std")]
-    fn compile<W: io::Write>(
-        wtr: W,
+    #[cfg(feature = "alloc")]
+    fn compile<W: FstWrite + ?Sized>(
+        wtr: &mut W,
         last_addr: CompiledAddr,
         addr: CompiledAddr,
         node: &BuilderNode,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         assert!(node.trans.len() <= 256);
         if node.trans.is_empty()
             && node.is_final
@@ -282,14 +284,14 @@ impl<'f> Node<'f> {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl BuilderNode {
-    pub fn compile_to<W: io::Write>(
+    pub fn compile_to<W: FstWrite + ?Sized>(
         &self,
-        wtr: W,
+        wtr: &mut W,
         last_addr: CompiledAddr,
         addr: CompiledAddr,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         Node::compile(wtr, last_addr, addr, self)
     }
 }
@@ -327,29 +329,29 @@ impl State {
 }
 
 impl StateOneTransNext {
-    #[cfg(feature = "std")]
-    fn compile<W: io::Write>(
-        mut wtr: W,
+    #[cfg(feature = "alloc")]
+    fn compile<W: FstWrite + ?Sized>(
+        wtr: &mut W,
         _: CompiledAddr,
         input: u8,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         let mut state = StateOneTransNext::new();
         state.set_common_input(input);
         if state.common_input().is_none() {
-            wtr.write_all(&[input])?;
+            wtr.fst_write_all(&[input])?;
         }
-        wtr.write_all(&[state.0])?;
+        wtr.fst_write_all(&[state.0])?;
         Ok(())
     }
 
     #[inline]
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     fn new() -> StateOneTransNext {
         StateOneTransNext(0b11_000000)
     }
 
     #[inline]
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     fn set_common_input(&mut self, input: u8) {
         self.0 = (self.0 & 0b11_000000) | common_idx(input, 0b11_1111);
     }
@@ -385,39 +387,38 @@ impl StateOneTransNext {
 }
 
 impl StateOneTrans {
-    #[cfg(feature = "std")]
-    fn compile<W: io::Write>(
-        mut wtr: W,
+    #[cfg(feature = "alloc")]
+    fn compile<W: FstWrite + ?Sized>(
+        wtr: &mut W,
         addr: CompiledAddr,
         trans: Transition,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         let out = trans.out.value();
-        let output_pack_size =
-            if out == 0 { 0 } else { bytes::pack_uint(&mut wtr, out)? };
-        let trans_pack_size = pack_delta(&mut wtr, addr, trans.addr)?;
+        let output_pack_size = if out == 0 { 0 } else { bytes::pack_uint(wtr, out)? };
+        let trans_pack_size = pack_delta(wtr, addr, trans.addr)?;
 
         let mut pack_sizes = PackSizes::new();
         pack_sizes.set_output_pack_size(output_pack_size);
         pack_sizes.set_transition_pack_size(trans_pack_size);
-        wtr.write_all(&[pack_sizes.encode()])?;
+        wtr.fst_write_all(&[pack_sizes.encode()])?;
 
         let mut state = StateOneTrans::new();
         state.set_common_input(trans.inp);
         if state.common_input().is_none() {
-            wtr.write_all(&[trans.inp])?;
+            wtr.fst_write_all(&[trans.inp])?;
         }
-        wtr.write_all(&[state.0])?;
+        wtr.fst_write_all(&[state.0])?;
         Ok(())
     }
 
     #[inline]
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     fn new() -> StateOneTrans {
         StateOneTrans(0b10_000000)
     }
 
     #[inline]
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     fn set_common_input(&mut self, input: u8) {
         self.0 = (self.0 & 0b10_000000) | common_idx(input, 0b11_1111);
     }
@@ -482,12 +483,12 @@ impl StateOneTrans {
 }
 
 impl StateAnyTrans {
-    #[cfg(feature = "std")]
-    fn compile<W: io::Write>(
-        mut wtr: W,
+    #[cfg(feature = "alloc")]
+    fn compile<W: FstWrite + ?Sized>(
+        wtr: &mut W,
         addr: CompiledAddr,
         node: &BuilderNode,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         assert!(node.trans.len() <= 256);
 
         let mut tsize = 0;
@@ -514,20 +515,20 @@ impl StateAnyTrans {
         if any_outs {
             if node.is_final {
                 bytes::pack_uint_in(
-                    &mut wtr,
+                    wtr,
                     node.final_output.value(),
                     osize,
                 )?;
             }
             for t in node.trans.iter().rev() {
-                bytes::pack_uint_in(&mut wtr, t.out.value(), osize)?;
+                bytes::pack_uint_in(wtr, t.out.value(), osize)?;
             }
         }
         for t in node.trans.iter().rev() {
-            pack_delta_in(&mut wtr, addr, t.addr, tsize)?;
+            pack_delta_in(wtr, addr, t.addr, tsize)?;
         }
         for t in node.trans.iter().rev() {
-            wtr.write_all(&[t.inp])?;
+            wtr.fst_write_all(&[t.inp])?;
         }
         if node.trans.len() > TRANS_INDEX_THRESHOLD {
             // A value of 255 indicates that no transition exists for the byte
@@ -538,32 +539,32 @@ impl StateAnyTrans {
             for (i, t) in node.trans.iter().enumerate() {
                 index[t.inp as usize] = i as u8;
             }
-            wtr.write_all(&index)?;
+            wtr.fst_write_all(&index)?;
         }
 
-        wtr.write_all(&[pack_sizes.encode()])?;
+        wtr.fst_write_all(&[pack_sizes.encode()])?;
         if state.state_ntrans().is_none() {
             if node.trans.len() == 256 {
                 // 256 can't be represented in a u8, so we abuse the fact that
                 // the # of transitions can never be 1 here, since 1 is always
                 // encoded in the state byte.
-                wtr.write_all(&[1])?;
+                wtr.fst_write_all(&[1])?;
             } else {
-                wtr.write_all(&[node.trans.len() as u8])?;
+                wtr.fst_write_all(&[node.trans.len() as u8])?;
             }
         }
-        wtr.write_all(&[state.0])?;
+        wtr.fst_write_all(&[state.0])?;
         Ok(())
     }
 
     #[inline]
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     fn new() -> StateAnyTrans {
         StateAnyTrans(0b00_000000)
     }
 
     #[inline]
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     fn set_final_state(&mut self, yes: bool) {
         if yes {
             self.0 |= 0b01_000000;
@@ -576,7 +577,7 @@ impl StateAnyTrans {
     }
 
     #[inline]
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     fn set_state_ntrans(&mut self, n: u8) {
         if n <= 0b00_111111 {
             self.0 = (self.0 & 0b11_000000) | n;
@@ -763,13 +764,13 @@ impl PackSizes {
     }
 
     #[inline]
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     fn encode(&self) -> u8 {
         self.0
     }
 
     #[inline]
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     fn set_transition_pack_size(&mut self, size: u8) {
         assert!(size <= 8);
         self.0 = (self.0 & 0b0000_1111) | (size << 4);
@@ -781,7 +782,7 @@ impl PackSizes {
     }
 
     #[inline]
-    #[cfg(feature = "std")]
+    #[cfg(feature = "alloc")]
     fn set_output_pack_size(&mut self, size: u8) {
         assert!(size <= 8);
         self.0 = (self.0 & 0b1111_0000) | size;
@@ -822,7 +823,7 @@ impl<'f, 'n> Iterator for Transitions<'f, 'n> {
 /// Nevertheless, the *caller* may have a priori knowledge that could be
 /// supplied to the builder manually, which could then be embedded in the FST.
 #[inline]
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 fn common_idx(input: u8, max: u8) -> u8 {
     let val = ((u32::from(COMMON_INPUTS[input as usize]) + 1) % 256) as u8;
     if val > max {
@@ -844,25 +845,25 @@ fn common_input(idx: u8) -> Option<u8> {
 }
 
 #[inline]
-#[cfg(feature = "std")]
-fn pack_delta<W: io::Write>(
-    wtr: W,
+#[cfg(feature = "alloc")]
+fn pack_delta<W: FstWrite + ?Sized>(
+    wtr: &mut W,
     node_addr: CompiledAddr,
     trans_addr: CompiledAddr,
-) -> io::Result<u8> {
+) -> Result<u8> {
     let nbytes = pack_delta_size(node_addr, trans_addr);
     pack_delta_in(wtr, node_addr, trans_addr, nbytes)?;
     Ok(nbytes)
 }
 
 #[inline]
-#[cfg(feature = "std")]
-fn pack_delta_in<W: io::Write>(
-    wtr: W,
+#[cfg(feature = "alloc")]
+fn pack_delta_in<W: FstWrite + ?Sized>(
+    wtr: &mut W,
     node_addr: CompiledAddr,
     trans_addr: CompiledAddr,
     nbytes: u8,
-) -> io::Result<()> {
+) -> Result<()> {
     let delta_addr = if trans_addr == EMPTY_ADDRESS {
         EMPTY_ADDRESS
     } else {
@@ -872,7 +873,7 @@ fn pack_delta_in<W: io::Write>(
 }
 
 #[inline]
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 fn pack_delta_size(node_addr: CompiledAddr, trans_addr: CompiledAddr) -> u8 {
     let delta_addr = if trans_addr == EMPTY_ADDRESS {
         EMPTY_ADDRESS
@@ -916,7 +917,7 @@ mod tests {
     #[test]
     fn prop_emits_inputs() {
         fn p(mut bs: Vec<Vec<u8>>) -> TestResult {
-            bs.sort();
+            bs.sort_unstable();
             bs.dedup();
 
             let mut bfst = Builder::memory();

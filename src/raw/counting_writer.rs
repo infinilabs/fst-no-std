@@ -1,6 +1,6 @@
-use std::io;
-
+use crate::error::Result;
 use crate::raw::crc32::CheckSummer;
+use crate::raw::fst_write::FstWrite;
 
 /// Wraps any writer that counts and checksums bytes written.
 pub struct CountingWriter<W> {
@@ -9,7 +9,7 @@ pub struct CountingWriter<W> {
     summer: CheckSummer,
 }
 
-impl<W: io::Write> CountingWriter<W> {
+impl<W: FstWrite> CountingWriter<W> {
     /// Wrap the given writer with a counter.
     pub fn new(wtr: W) -> CountingWriter<W> {
         CountingWriter { wtr, cnt: 0, summer: CheckSummer::new() }
@@ -43,28 +43,28 @@ impl<W: io::Write> CountingWriter<W> {
     }
 }
 
-impl<W: io::Write> io::Write for CountingWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+impl<W: FstWrite> FstWrite for CountingWriter<W> {
+    fn fst_write_all(&mut self, buf: &[u8]) -> Result<()> {
         self.summer.update(buf);
-        let n = self.wtr.write(buf)?;
-        self.cnt += n as u64;
-        Ok(n)
+        self.wtr.fst_write_all(buf)?;
+        self.cnt += buf.len() as u64;
+        Ok(())
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        self.wtr.flush()
+    fn fst_flush(&mut self) -> Result<()> {
+        self.wtr.fst_flush()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::CountingWriter;
-    use std::io::Write;
+    use crate::raw::fst_write::FstWrite;
 
     #[test]
     fn counts_bytes() {
         let mut wtr = CountingWriter::new(vec![]);
-        wtr.write_all(b"foobar").unwrap();
+        wtr.fst_write_all(b"foobar").unwrap();
         assert_eq!(wtr.count(), 6);
     }
 }

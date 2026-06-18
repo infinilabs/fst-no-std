@@ -2,6 +2,7 @@ use crate::bytes;
 use crate::error::Result;
 use crate::raw::counting_writer::CountingWriter;
 use crate::raw::error::Error;
+use crate::raw::fst_write::FstWrite;
 use crate::raw::registry::Registry;
 use crate::raw::registry::RegistryEntry;
 use crate::raw::Output;
@@ -9,7 +10,6 @@ use crate::raw::{CompiledAddr, Transition};
 use crate::raw::{Fst, FstType, EMPTY_ADDRESS, NONE_ADDRESS, VERSION};
 use crate::stream::{IntoStreamer, Streamer};
 use alloc::{vec, vec::Vec};
-use std::io;
 
 /// A builder for creating a finite state transducer.
 ///
@@ -39,7 +39,7 @@ use std::io;
 ///
 /// The algorithmic complexity of fst construction is `O(n)` where `n` is the
 /// number of elements added to the fst.
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 pub struct Builder<W> {
     /// The FST raw data is written directly to `wtr`.
     ///
@@ -99,7 +99,7 @@ struct LastTransition {
     out: Output,
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl Builder<Vec<u8>> {
     /// Create a builder that builds an fst in memory.
     #[inline]
@@ -115,8 +115,8 @@ impl Builder<Vec<u8>> {
     }
 }
 
-#[cfg(feature = "std")]
-impl<W: io::Write> Builder<W> {
+#[cfg(feature = "alloc")]
+impl<W: FstWrite> Builder<W> {
     /// Create a builder that builds an fst by writing it to `wtr` in a
     /// streaming fashion.
     pub fn new(wtr: W) -> Result<Builder<W>> {
@@ -228,7 +228,7 @@ impl<W: io::Write> Builder<W> {
         let sum = self.wtr.masked_checksum();
         let mut wtr = self.wtr.into_inner();
         bytes::io_write_u32_le(sum, &mut wtr)?;
-        wtr.flush()?;
+        wtr.fst_flush()?;
         Ok(wtr)
     }
 
@@ -331,7 +331,7 @@ impl<W: io::Write> Builder<W> {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl UnfinishedNodes {
     fn new() -> UnfinishedNodes {
         let mut unfinished = UnfinishedNodes { stack: Vec::with_capacity(64) };
@@ -429,7 +429,7 @@ impl UnfinishedNodes {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl BuilderNodeUnfinished {
     fn last_compiled(&mut self, addr: CompiledAddr) {
         if let Some(trans) = self.last.take() {

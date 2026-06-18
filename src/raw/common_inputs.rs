@@ -1,4 +1,4 @@
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 pub const COMMON_INPUTS: [u8; 256] = [
     84,  // '\x00'
     85,  // '\x01'
